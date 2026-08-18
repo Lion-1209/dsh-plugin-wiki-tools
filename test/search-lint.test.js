@@ -54,6 +54,20 @@ test('searchVault ranks title matches above body matches and reports links', asy
   assert.ok(entity.snippets.length > 0)
 })
 
+test('inbound links dedupe per source page across repeated wikilinks', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await vault.writePage({ type: 'concept', title: 'Repeated Target', content: '# T\n\nTarget.' })
+  await vault.writePage({
+    type: 'entity',
+    title: 'Repeater',
+    content: 'Links [[Repeated Target]] twice: [[Repeated Target]].',
+  })
+  const { results } = await searchVault(root, { query: 'repeated' })
+  const target = results.find(result => result.name === 'Repeated Target')
+  assert.deepEqual(target.inbound, ['Repeater'], 'one inbound record per source page')
+})
+
 test('lintVault flags the seeded issues and writes a report', async () => {
   const root = await makeVault()
   await seedFixture(root)
