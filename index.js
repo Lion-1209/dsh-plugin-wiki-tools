@@ -26,6 +26,16 @@ export const Config = z.object({
   vaultPath: z.string().required(),
   /** Maximum pages returned by one wiki_query standard-mode call. */
   maxQueryResults: z.number().default(10),
+  /** Per-type folder overrides over the default routing, e.g. `{ domain: "wiki/areas" }`. */
+  typeFolders: z.object({
+    source: z.string(),
+    entity: z.string(),
+    concept: z.string(),
+    domain: z.string(),
+    question: z.string(),
+    comparison: z.string(),
+    meta: z.string(),
+  }).default({}),
 })
 
 const PAGE_TYPES = ['source', 'entity', 'concept', 'domain', 'question', 'comparison', 'meta']
@@ -201,7 +211,7 @@ export async function apply(ctx, config) {
       + 'The vault is the directory holding wiki/ and .raw/ (scaffold it with the wiki skill first).',
     )
   }
-  const vault = new Vault(config.vaultPath)
+  const vault = new Vault(config.vaultPath, config.typeFolders ?? {})
   await vault.assertRoot()
   for (const tool of createTools(vault, config)) {
     ctx.tools.register(tool)

@@ -30,9 +30,13 @@ dsh plugin --profile web add dsh-plugin-wiki-tools
 - id: wiki-tools
   config:
     vaultPath: /absolute/path/to/vault
+    # optional: reroute page types to your vault's folders; index section
+    # headings follow the mapped folder name (e.g. "## Areas")
+    typeFolders:
+      domain: wiki/areas
 ```
 
-The vault is the directory holding `wiki/` and `.raw/` — scaffold it first with the `wiki` skill's SCAFFOLD operation. `maxQueryResults` (default 10) is optional.
+The vault is the directory holding `wiki/` and `.raw/` — scaffold it first with the `wiki` skill's SCAFFOLD operation. `maxQueryResults` (default 10) is optional. `wiki_write` refreshes existing index entries in the section's own style (`: ` or ` — `), so em-dash vaults stay consistent.
 
 ## Design notes
 

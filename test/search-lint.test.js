@@ -75,3 +75,32 @@ test('lintVault passes a clean vault', async () => {
   const { issues } = await lintVault(root)
   assert.deepEqual(issues, [], 'an indexed page with complete frontmatter is clean')
 })
+
+test('lintVault exempts _index files and container headings', async () => {
+  const root = await makeVault()
+  await mkdir(join(root, 'wiki', 'entities'), { recursive: true })
+  await mkdir(join(root, 'wiki', 'concepts'), { recursive: true })
+  await writeFile(join(root, 'wiki', 'entities', '_index.md'), '---\ntype: meta\n---\n# Entities\n\n- a', 'utf8')
+  await writeFile(join(root, 'wiki', 'concepts', '_index.md'), '---\ntype: meta\n---\n# Concepts\n\n- b', 'utf8')
+  await writeFile(join(root, 'wiki', 'concepts', 'Container Page.md'), [
+    '# Container Page',
+    '',
+    '## Overview',
+    '',
+    '### Detail',
+    '',
+    'Real content here.',
+    '',
+    '## Genuinely Empty',
+    '',
+    '## Next',
+    '',
+    'Also content.',
+  ].join('\n'), 'utf8')
+  const { issues } = await lintVault(root)
+  const checks = issues.map(issue => issue.check)
+  assert.ok(!checks.includes('duplicate-filename'), 'sibling _index.md files are by design')
+  const empties = issues.filter(issue => issue.check === 'empty-section')
+  assert.deepEqual(empties.map(issue => issue.detail), ['section "Genuinely Empty" has no content'],
+    'a title over subsections is a container; only a sibling-followed empty heading flags')
+})

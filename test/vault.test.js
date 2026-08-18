@@ -85,7 +85,59 @@ test('trackSource reports delta state across calls', async () => {
   await writeFile(join(root, '.raw', 'article.md'), 'source content v2', 'utf8')
   const third = await vault.trackSource({ sourcePath: '.raw/article.md' })
   assert.equal(third.alreadyIngested, false)
-  await assert.rejects(vault.trackSource({ sourcePath: '.raw/missing.md' }), /not found/)
+  await assert.rejects(() => vault.trackSource({ sourcePath: '.raw/missing.md' }), /not found/)
+})
+
+test('updateIndex preserves an em-dash section style and refreshes in place', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await mkdir(join(root, 'wiki'), { recursive: true })
+  await writeFile(join(root, 'wiki', 'index.md'), [
+    '# Wiki Index',
+    '',
+    '## Domains',
+    '- [[Health]] — 健康管理',
+    '- [[Career]] — 职业发展',
+    '',
+    '## Concepts',
+    '- [[Old Idea]]: legacy colon style',
+    '',
+  ].join('\n'), 'utf8')
+
+  await vault.writePage({ type: 'domain', title: 'Health', content: 'Updated body.', summary: '健康管理与健康记录。' })
+  let index = await readFile(join(root, 'wiki', 'index.md'), 'utf8')
+  assert.ok(index.includes('- [[Health]] — 健康管理与健康记录。'), 'refresh keeps em-dash style')
+  assert.ok(!index.includes(': Updated body.'), 'old colon entry not duplicated')
+
+  await vault.writePage({ type: 'domain', title: 'Learning', content: 'New area.', summary: '学习笔记。' })
+  index = await readFile(join(root, 'wiki', 'index.md'), 'utf8')
+  assert.ok(index.includes('- [[Learning]] — 学习笔记。'), 'insert follows the section style')
+
+  await vault.writePage({ type: 'concept', title: 'New Idea', content: 'Body.', summary: 'A colon entry.' })
+  index = await readFile(join(root, 'wiki', 'index.md'), 'utf8')
+  assert.ok(index.includes('- [[New Idea]]: A colon entry.'), 'colon section keeps colon style')
+})
+
+test('typeFolders config reroutes pages and validates input', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root, { domain: 'wiki/areas' })
+  const { path } = await vault.writePage({ type: 'domain', title: 'Health', content: 'Body.' })
+  assert.equal(path, join(root, 'wiki', 'areas', 'Health.md'))
+  const index = await readFile(join(root, 'wiki', 'index.md'), 'utf8')
+  assert.ok(index.includes('## Areas'), 'index section follows the remapped folder')
+  assert.throws(() => new Vault(root, { unknown: 'wiki/x' }), /unknown type/)
+  assert.throws(() => new Vault(root, { domain: '../escape' }), /vault-relative/)
+})
+
+test('titles with regex metacharacters match their index entry', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  const tricky = 'DMA Project A (bss-to-RAM_D1)'
+  await vault.writePage({ type: 'concept', title: tricky, content: 'Body one.', summary: 'S1.' })
+  await vault.writePage({ type: 'concept', title: tricky, content: 'Body two.', summary: 'S2.' })
+  const index = await readFile(join(root, 'wiki', 'index.md'), 'utf8')
+  assert.ok(index.includes(`- [[${tricky}]]: S2.`), 'refreshed in place')
+  assert.ok(!index.includes('S1.'), 'no stale duplicate entry')
 })
 
 test('vault root validation and wikilink extraction', async () => {
