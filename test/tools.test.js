@@ -64,3 +64,31 @@ test('tool executes run end to end over a fixture vault', async () => {
   assert.equal(linted.summary.pagesScanned >= 1, true)
   assert.ok(linted.reportPath.includes('lint-report-'))
 })
+
+test('render output carries the full model-facing content, not a summary line', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wiki-render-'))
+  await mkdir(join(root, 'wiki'), { recursive: true })
+  const tools = Object.fromEntries(createTools(new Vault(root)).map(tool => [tool.name, tool]))
+  const exec = {}
+
+  const written = await tools.wiki_write.execute({
+    title: 'Render Probe',
+    type: 'concept',
+    content: '# Render Probe\n\nThe rendering contract requires actual content.',
+  }, exec)
+  assert.equal(written.created, true)
+
+  const standard = await tools.wiki_query.execute({ query: 'rendering contract' }, exec)
+  const standardText = tools.wiki_query.output.render({ query: 'rendering contract' }, standard)[0].text
+  assert.ok(standardText.includes('Render Probe'), 'result name in render')
+  assert.ok(standardText.includes('The rendering contract requires actual content.'), 'snippet in render')
+  assert.ok(standardText.includes('path: '), 'path in render')
+
+  const quick = await tools.wiki_query.execute({ query: 'x', mode: 'quick' }, exec)
+  const quickText = tools.wiki_query.output.render({}, quick)[0].text
+  assert.ok(quickText.includes('# Wiki Index'), 'index content in quick render')
+
+  const linted = await tools.wiki_lint.execute({}, exec)
+  const lintText = tools.wiki_lint.output.render({}, linted)[0].text
+  assert.ok(lintText.includes(`wiki_lint: ${linted.summary.issues} issues`), 'issue count in lint render')
+})

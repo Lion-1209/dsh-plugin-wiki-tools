@@ -76,9 +76,7 @@ export function createTools(vault, options = {}) {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: typeof value === 'object' && value !== null && 'results' in value
-          ? `wiki_query: ${value.results.length} of ${value.totalMatches} matching pages`
-          : 'wiki_query: returned hot cache and master index',
+        text: renderQueryResult(value),
       }],
     },
     async execute(args) {
@@ -181,9 +179,7 @@ export function createTools(vault, options = {}) {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: typeof value === 'object' && value !== null && 'summary' in value
-          ? `wiki_lint: ${value.summary.issues} issues across ${value.summary.pagesScanned} pages; report at ${value.reportPath ?? '(not written)'}`
-          : 'wiki_lint: failed',
+        text: renderLintResult(value),
       }],
     },
     async execute() {
@@ -193,6 +189,68 @@ export function createTools(vault, options = {}) {
   })
 
   return [wikiQuery, wikiWrite, wikiLint]
+}
+
+/**
+ * Render a wiki_query result as the model-facing text. The render output is the
+ * ONLY content the model sees, so it carries the full payload — hot cache and
+ * index verbatim in quick mode, every result with path, snippets, and link
+ * context in standard mode — not a summary line.
+ * @param {unknown} value - the execute return value.
+ * @returns {string} the model-facing result text.
+ */
+function renderQueryResult(value) {
+  if (typeof value !== 'object' || value === null) return 'wiki_query: no result'
+  const result = value
+  if (result.mode === 'quick') {
+    const parts = []
+    if (typeof result.hot === 'string' && result.hot.length > 0) {
+      parts.push(`--- wiki/hot.md (recent context cache) ---\n${capText(result.hot, 6000)}`)
+    }
+    if (typeof result.index === 'string' && result.index.length > 0) {
+      parts.push(`--- wiki/index.md (master catalog) ---\n${capText(result.index, 8000)}`)
+    }
+    if (parts.length === 0) return 'wiki_query (quick): the vault has no hot.md or index.md yet'
+    return `wiki_query (quick): hot cache and master index follow. Read these before any page.\n\n${parts.join('\n\n')}`
+  }
+  if (!Array.isArray(result.results)) return 'wiki_query: no result'
+  const lines = [`wiki_query: ${result.results.length} of ${result.totalMatches} matching pages. Open a page with the fs read tool for full content.`]
+  for (const hit of result.results) {
+    lines.push(`\n### ${hit.name}`)
+    lines.push(`path: ${hit.path} · score ${hit.score} · inbound ${hit.inbound.length}${hit.inbound.length > 0 ? ` (${hit.inbound.slice(0, 5).join(', ')})` : ''} · outbound ${hit.outbound}`)
+    for (const snippet of hit.snippets) lines.push(`> ${snippet}`)
+  }
+  return capText(lines.join('\n'), 12000)
+}
+
+/**
+ * Render a wiki_lint result: every issue with page, severity, and suggestion.
+ * @param {unknown} value - the execute return value.
+ * @returns {string} the model-facing result text.
+ */
+function renderLintResult(value) {
+  if (typeof value !== 'object' || value === null || !('summary' in value)) return 'wiki_lint: failed'
+  const result = value
+  const lines = [
+    `wiki_lint: ${result.summary.issues} issues across ${result.summary.pagesScanned} pages.`,
+    `checks: ${Object.entries(result.summary.byCheck ?? {}).map(([check, count]) => `${check}×${count}`).join(', ') || 'none'}`,
+    `full report: ${typeof result.reportPath === 'string' ? result.reportPath : '(not written)'}`,
+  ]
+  for (const issue of (result.issues ?? []).slice(0, 60)) {
+    lines.push(`- [${issue.severity}] ${issue.check} · ${issue.page}: ${issue.detail} → ${issue.suggestion}`)
+  }
+  if ((result.issues ?? []).length > 60) lines.push(`… and ${result.issues.length - 60} more (see the report file)`)
+  return lines.join('\n')
+}
+
+/**
+ * Cap one text block, marking the cut.
+ * @param {string} text - full text.
+ * @param {number} max - maximum characters kept.
+ * @returns {string} the capped text.
+ */
+function capText(text, max) {
+  return text.length <= max ? text : `${text.slice(0, max)}\n… (truncated at ${max} characters)`
 }
 
 /**
