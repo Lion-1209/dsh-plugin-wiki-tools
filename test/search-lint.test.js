@@ -124,6 +124,28 @@ test('lintVault exempts _index files and container headings', async () => {
     'a title over subsections is a container; only a sibling-followed empty heading flags')
 })
 
+test('frontmatter aliases resolve links and match queries', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await vault.writePage({ type: 'entity', title: 'STM32H7', content: '# STM32H7\n\nMCU family.' })
+  await vault.writePage({
+    type: 'concept',
+    title: 'Alias Quoter',
+    content: '# Quoter\n\nThe [[STM32H743]] variant ships more RAM.',
+  })
+  // Declare the alias after creation, as a real vault would.
+  const { readFile, writeFile } = await import('node:fs/promises')
+  const page = join(root, 'wiki', 'entities', 'STM32H7.md')
+  await writeFile(page, (await readFile(page, 'utf8')).replace('type: entity', 'type: entity\naliases:\n  - STM32H743'), 'utf8')
+
+  const linted = await lintVault(root)
+  assert.ok(!linted.issues.some(issue => issue.check === 'dead-link'),
+    'a link through a declared alias resolves')
+
+  const { results } = await searchVault(root, { query: 'stm32h743' })
+  assert.equal(results[0].name, 'STM32H7', 'query by alias finds the owning page')
+})
+
 test('lint reports and inline code are not link-graph sources', async () => {
   const root = await makeVault()
   const vault = new Vault(root)

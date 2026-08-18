@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-wiki-tools",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Native DeepSeek Harness tools for an Obsidian wiki vault: wiki_query, wiki_write, and wiki_lint implement the mechanical core (path routing, delta tracking, index/log bookkeeping, health checks) of the wiki skill suite.",
   "license": "MIT",
   "type": "module",
