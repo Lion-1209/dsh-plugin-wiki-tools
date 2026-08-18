@@ -140,6 +140,17 @@ test('titles with regex metacharacters match their index entry', async () => {
   assert.ok(!index.includes('S1.'), 'no stale duplicate entry')
 })
 
+test('trackSource normalizes path separators in manifest keys', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await writeFile(join(root, '.raw', 'note.md'), 'content', 'utf8')
+  await vault.trackSource({ sourcePath: join('.raw', 'note.md') })
+  const again = await vault.trackSource({ sourcePath: '.raw/note.md' })
+  assert.equal(again.alreadyIngested, true, 'forward and platform separators hit one entry')
+  const manifest = JSON.parse(await readFile(join(root, '.raw', '.manifest.json'), 'utf8'))
+  assert.deepEqual(Object.keys(manifest.sources), ['.raw/note.md'], 'key stored with forward slashes')
+})
+
 test('vault root validation and wikilink extraction', async () => {
   assert.throws(() => new Vault('relative/path'), /absolute/)
   assert.deepEqual(

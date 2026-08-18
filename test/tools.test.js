@@ -86,6 +86,7 @@ test('render output carries the full model-facing content, not a summary line', 
 
   const quick = await tools.wiki_query.execute({ query: 'x', mode: 'quick' }, exec)
   const quickText = tools.wiki_query.output.render({}, quick)[0].text
+  assert.ok(quickText.includes(`wiki vault: ${root}`), 'vault root disclosed in render')
   assert.ok(quickText.includes('# Wiki Index'), 'index content in quick render')
 
   const linted = await tools.wiki_lint.execute({}, exec)

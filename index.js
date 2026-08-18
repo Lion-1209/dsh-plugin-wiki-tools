@@ -76,7 +76,7 @@ export function createTools(vault, options = {}) {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: renderQueryResult(value),
+        text: `${renderVaultRoot(vault.root)}\n\n${renderQueryResult(value)}`,
       }],
     },
     async execute(args) {
@@ -95,7 +95,9 @@ export function createTools(vault, options = {}) {
     description:
       'Write or update one wiki page with full bookkeeping: routes the page to its type folder, '
       + 'completes YAML frontmatter (type, title, status, created, updated, tags), guards filename '
-      + 'uniqueness, updates the master index entry, and prepends a log entry. The content is the '
+      + 'uniqueness, updates the master index entry, and prepends a log entry. Writes go to the '
+      + 'CONFIGURED VAULT (run wiki_query to see its absolute root), not the session workspace. '
+      + 'The content is the '
       + 'markdown body only — frontmatter is managed. With source_path, records the source hash in '
       + 'the ingest manifest and reports already_ingested for unchanged content unless force is set.',
     parameters: {
@@ -189,6 +191,17 @@ export function createTools(vault, options = {}) {
   })
 
   return [wikiQuery, wikiWrite, wikiLint]
+}
+
+/**
+ * Render a compact byline disclosing the vault root. Without it, a model whose
+ * session workspace differs from the vault resolves `.raw/…` against the
+ * workspace and concludes the tools point somewhere else.
+ * @param {string} root - absolute vault root.
+ * @returns {string} the byline.
+ */
+function renderVaultRoot(root) {
+  return `wiki vault: ${root} — every wiki tool (query, write, lint) operates on this configured vault, not the session workspace. Resolve vault-relative paths like .raw/… and wiki/… against this root.`
 }
 
 /**
