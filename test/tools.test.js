@@ -10,7 +10,7 @@ test('createTools returns four schema-complete tools', async () => {
   const root = await mkdtemp(join(tmpdir(), 'wiki-tools-'))
   await mkdir(join(root, 'wiki'), { recursive: true })
   const tools = createTools(new Vault(root))
-  assert.deepEqual(tools.map(tool => tool.name), ['wiki_query', 'wiki_write', 'wiki_rename', 'wiki_lint'])
+  assert.deepEqual(tools.map(tool => tool.name), ['wiki_query', 'wiki_write', 'wiki_rename', 'wiki_scaffold', 'wiki_lint'])
   for (const tool of tools) {
     assert.equal(typeof tool.description, 'string')
     assert.ok(tool.description.length > 40, `${tool.name} has a routing description`)

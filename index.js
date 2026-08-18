@@ -16,6 +16,7 @@ import z from '@deepseek-ai/schemastery'
 import { Vault } from './lib/vault.js'
 import { quickView, searchVault } from './lib/search.js'
 import { lintVault } from './lib/lint.js'
+import { scaffoldVault, SCAFFOLD_MODES } from './lib/scaffold.js'
 
 export const name = 'wiki-tools'
 export const inject = ['tools']
@@ -215,6 +216,47 @@ export function createTools(vault, options = {}) {
     presentCall: args => ({ card: 'generic', title: `Rename wiki page: ${args.title} → ${args.new_title}`, kind: 'other', rawInput: { from: args.title, to: args.new_title } }),
   })
 
+  const wikiScaffold = defineTool({
+    name: 'wiki_scaffold',
+    description:
+      'Scaffold a wiki vault in one call: the chosen mode\u2019s folder structure with per-folder _index.md, '
+      + 'the core files (wiki/index.md, log.md, hot.md, overview.md), the mode\u2019s key seed pages, a raw-source '
+      + 'manifest, and the vault AGENTS.md conventions file. Idempotent — existing files are kept. Modes: '
+      + 'generic (matches wiki_write routing), sitemap, repository, business, personal, research, book. '
+      + 'The result carries a suggested typeFolders config for non-generic modes to paste into the profile.',
+    parameters: {
+      mode: {
+        type: 'string',
+        required: true,
+        enum: Object.keys(SCAFFOLD_MODES),
+        description: 'Scaffold mode; pick by what the vault is for (generic for a general knowledge base).',
+      },
+      purpose: {
+        type: 'string',
+        description: 'One-line vault purpose, written into overview.md and AGENTS.md.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: true,
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: typeof value === 'object' && value !== null && 'created' in value
+          ? `wiki_scaffold (${value.mode}): created ${value.created.length} files, skipped ${value.skipped.length} existing`
+            + (Object.keys(value.suggestedTypeFolders ?? {}).length > 0
+              ? `; suggested typeFolders: ${JSON.stringify(value.suggestedTypeFolders)}`
+              : '')
+          : 'wiki_scaffold: failed',
+      }],
+    },
+    async execute(args) {
+      return await scaffoldVault(vault.root, args)
+    },
+    presentCall: args => ({ card: 'generic', title: `Scaffold wiki vault (${args.mode})`, kind: 'other', rawInput: { mode: args.mode } }),
+  })
+
   const wikiLint = defineTool({
     name: 'wiki_lint',
     description:
@@ -238,7 +280,7 @@ export function createTools(vault, options = {}) {
     presentCall: () => ({ card: 'generic', title: 'Lint wiki vault', kind: 'other' }),
   })
 
-  return [wikiQuery, wikiWrite, wikiRename, wikiLint]
+  return [wikiQuery, wikiWrite, wikiRename, wikiScaffold, wikiLint]
 }
 
 /**
