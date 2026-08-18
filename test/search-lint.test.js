@@ -24,7 +24,7 @@ async function seedFixture(root) {
   await vault.writePage({
     type: 'entity',
     title: 'Andrej Karpathy',
-    content: '# Karpathy\n\nDescribed the [[Compounding Vault Pattern]] publicly.\n\n## Empty Section\n',
+    content: '# Karpathy\n\nDescribed the [[Compounding Vault Pattern]] publicly and cites [[Missing Collaborator]].\n\n## Empty Section\n',
     summary: 'Researcher; LLM Wiki pattern author.',
   })
   await writeFile(join(root, 'wiki', 'hot.md'), '---\ntype: meta\nupdated: 2020-01-01\n---\n\n# Recent Context\n', 'utf8')
@@ -50,7 +50,7 @@ test('searchVault ranks title matches above body matches and reports links', asy
   assert.ok(entity, 'body match included')
   assert.deepEqual(results[0].inbound, ['Andrej Karpathy'])
   assert.equal(results[0].outbound, 0)
-  assert.equal(entity.outbound, 1)
+  assert.equal(entity.outbound, 2, 'Karpathy links the concept and the missing collaborator')
   assert.ok(entity.snippets.length > 0)
 })
 
@@ -74,7 +74,7 @@ test('lintVault flags the seeded issues and writes a report', async () => {
   const { issues, summary, reportPath } = await lintVault(root)
   const checks = issues.map(issue => issue.check)
 
-  assert.ok(checks.includes('dead-link'), 'Renamed Away index link has no page')
+  assert.ok(checks.includes('dead-link'), 'Karpathy page links a missing page')
   assert.ok(checks.includes('stale-index-entry'), 'index entry points at renamed page')
   assert.ok(checks.includes('empty-section'), 'Karpathy page has an empty section')
   assert.ok(checks.includes('stale-hot-cache'), 'hot cache older than page updates')
@@ -110,6 +110,11 @@ test('lintVault exempts _index files and container headings', async () => {
     '## Next',
     '',
     'Also content.',
+    '',
+    '```sh',
+    '# a shell comment that looks like a heading',
+    'ls',
+    '```',
   ].join('\n'), 'utf8')
   const { issues } = await lintVault(root)
   const checks = issues.map(issue => issue.check)
@@ -117,4 +122,29 @@ test('lintVault exempts _index files and container headings', async () => {
   const empties = issues.filter(issue => issue.check === 'empty-section')
   assert.deepEqual(empties.map(issue => issue.detail), ['section "Genuinely Empty" has no content'],
     'a title over subsections is a container; only a sibling-followed empty heading flags')
+})
+
+test('lint reports and inline code are not link-graph sources', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await vault.writePage({ type: 'concept', title: 'Real Page', content: '# Real\n\nContent.' })
+  await vault.writePage({
+    type: 'entity',
+    title: 'Quoter',
+    content: '# Quoter\n\nExample syntax `[[Not A Link]]` in backticks.',
+  })
+  const linted = await lintVault(root)
+  const dead = linted.issues.filter(issue => issue.check === 'dead-link')
+  assert.ok(!dead.some(issue => issue.detail.includes('Not A Link')), 'inline-code wikilinks are not links')
+
+  // A lint report quoting past dead links must not resurrect them as issues.
+  await mkdir(join(root, 'wiki', 'meta'), { recursive: true })
+  await writeFile(join(root, 'wiki', 'meta', 'lint-report-2026-08-18.md'),
+    '---\ntype: meta\n---\n# Lint Report\n\n- links to [[Ghost Page]] which does not exist (recorded)', 'utf8')
+  const after = await lintVault(root)
+  assert.ok(!after.issues.some(issue => issue.check === 'dead-link' && issue.detail.includes('Ghost Page')),
+    'report-recorded links are history, not graph edges')
+
+  const { results } = await searchVault(root, { query: 'Ghost Page' })
+  assert.ok(!results.some(result => result.name.startsWith('lint-report')), 'reports are not search hits')
 })
