@@ -6,11 +6,11 @@ import { join } from 'node:path'
 import { createTools } from '../index.js'
 import { Vault } from '../lib/vault.js'
 
-test('createTools returns three schema-complete tools', async () => {
+test('createTools returns four schema-complete tools', async () => {
   const root = await mkdtemp(join(tmpdir(), 'wiki-tools-'))
   await mkdir(join(root, 'wiki'), { recursive: true })
   const tools = createTools(new Vault(root))
-  assert.deepEqual(tools.map(tool => tool.name), ['wiki_query', 'wiki_write', 'wiki_lint'])
+  assert.deepEqual(tools.map(tool => tool.name), ['wiki_query', 'wiki_write', 'wiki_rename', 'wiki_lint'])
   for (const tool of tools) {
     assert.equal(typeof tool.description, 'string')
     assert.ok(tool.description.length > 40, `${tool.name} has a routing description`)

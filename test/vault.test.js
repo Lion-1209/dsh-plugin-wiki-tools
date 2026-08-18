@@ -151,6 +151,85 @@ test('trackSource normalizes path separators in manifest keys', async () => {
   assert.deepEqual(Object.keys(manifest.sources), ['.raw/note.md'], 'key stored with forward slashes')
 })
 
+test('extraFrontmatter merges schema fields and rejects managed or nested keys', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  const { path } = await vault.writePage({
+    type: 'question',
+    title: 'Why Plugin First',
+    content: 'Answer body.',
+    extraFrontmatter: {
+      question: 'Why go plugin-first?',
+      answer_quality: 'solid',
+      related: ['[[Plugin Architecture]]'],
+    },
+  })
+  const { fields } = splitFrontmatter(await readFile(path, 'utf8'), path)
+  assert.equal(fields.question, 'Why go plugin-first?')
+  assert.equal(fields.answer_quality, 'solid')
+  assert.deepEqual(fields.related, ['[[Plugin Architecture]]'])
+  assert.equal(fields.type, 'question')
+
+  await assert.rejects(
+    () => vault.writePage({ type: 'concept', title: 'Bad Override', content: 'x', extraFrontmatter: { status: 'evergreen' } }),
+    /cannot override managed field "status"/,
+  )
+  await assert.rejects(
+    () => vault.writePage({ type: 'concept', title: 'Bad Nested', content: 'x', extraFrontmatter: { custom: { deep: true } } }),
+    /must stay flat/,
+  )
+})
+
+test('synthesis routes to questions and _index.md is maintained', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await vault.writePage({ type: 'synthesis', title: 'Harness Tradeoffs', content: 'Synthesis body.', summary: 'Tradeoff analysis.' })
+  const pagePath = join(root, 'wiki', 'questions', 'Harness Tradeoffs.md')
+  assert.ok(await readFile(pagePath, 'utf8').then(() => true, () => false), 'synthesis files under questions/')
+  const folderIndex = await readFile(join(root, 'wiki', 'questions', '_index.md'), 'utf8')
+  assert.ok(folderIndex.includes('- [[Harness Tradeoffs]]: Tradeoff analysis.'), 'folder _index entry created')
+
+  await vault.writePage({ type: 'synthesis', title: 'Harness Tradeoffs', content: 'Updated body.', summary: 'Refreshed.' })
+  const refreshed = await readFile(join(root, 'wiki', 'questions', '_index.md'), 'utf8')
+  assert.ok(refreshed.includes('- [[Harness Tradeoffs]]: Refreshed.'), 'entry refreshed in place')
+  assert.ok(!refreshed.includes('Tradeoff analysis.'), 'no stale duplicate line')
+})
+
+test('renamePage rewrites links, swaps indexes, and spares history', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await vault.writePage({ type: 'concept', title: 'Old Name', content: 'The concept itself.', summary: 'Old summary.' })
+  await vault.writePage({
+    type: 'entity',
+    title: 'Linker',
+    content: 'Links [[Old Name]], alias [[Old Name|the concept]], anchor [[Old Name#section]], and other [[Unrelated Page Name]].',
+  })
+  await vault.renamePage({ title: 'Old Name', newTitle: 'New Name' })
+
+  const moved = await readFile(join(root, 'wiki', 'concepts', 'New Name.md'), 'utf8')
+  assert.ok(moved.includes('title: New Name'), 'frontmatter retitled')
+  assert.ok(await readFile(join(root, 'wiki', 'concepts', 'Old Name.md'), 'utf8').then(() => false, () => true), 'old file gone')
+
+  const linker = await readFile(join(root, 'wiki', 'entities', 'Linker.md'), 'utf8')
+  assert.ok(linker.includes('[[New Name]]') && linker.includes('[[New Name|the concept]]') && linker.includes('[[New Name#section]]'), 'all link forms rewritten')
+  assert.ok(linker.includes('[[Unrelated Page Name]]'), 'prefix-similar titles untouched')
+
+  const index = await readFile(join(root, 'wiki', 'index.md'), 'utf8')
+  assert.ok(!index.includes('[[Old Name]]'), 'old index entry removed')
+  assert.ok(index.includes('[[New Name]]'), 'new index entry present')
+  const folderIndex = await readFile(join(root, 'wiki', 'concepts', '_index.md'), 'utf8')
+  assert.ok(folderIndex.includes('[[New Name]]') && !folderIndex.includes('[[Old Name]]'), 'folder index swapped')
+
+  const log = await readFile(join(root, 'wiki', 'log.md'), 'utf8')
+  assert.ok(log.includes('] rename | Old Name'), 'rename logged')
+  assert.ok(log.includes('[[Old Name]] → [[New Name]]'), 'log keeps the old name as history')
+
+  await assert.rejects(
+    () => vault.renamePage({ title: 'New Name', newTitle: 'Linker' }),
+    /already exists/,
+  )
+})
+
 test('vault root validation and wikilink extraction', async () => {
   assert.throws(() => new Vault('relative/path'), /absolute/)
   assert.deepEqual(

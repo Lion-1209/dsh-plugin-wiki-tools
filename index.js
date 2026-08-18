@@ -38,8 +38,8 @@ export const Config = z.object({
   }).default({}),
 })
 
-const PAGE_TYPES = ['source', 'entity', 'concept', 'domain', 'question', 'comparison', 'meta']
-const STATUSES = ['seed', 'developing', 'solid']
+const PAGE_TYPES = ['source', 'entity', 'concept', 'domain', 'question', 'synthesis', 'comparison', 'decision', 'session', 'meta']
+const STATUSES = ['seed', 'developing', 'mature', 'evergreen']
 
 /**
  * Build the three wiki tool definitions over one vault. Exported for tests.
@@ -125,11 +125,21 @@ export function createTools(vault, options = {}) {
       status: {
         type: 'string',
         enum: STATUSES,
-        description: 'Frontmatter status; defaults to developing (kept on update).',
+        description: 'Frontmatter status (seed | developing | mature | evergreen); defaults to developing (kept on update).',
       },
       summary: {
         type: 'string',
         description: 'One-line master-index entry; defaults to the first content line.',
+      },
+      extra_frontmatter: {
+        type: 'object',
+        additionalProperties: true,
+        description:
+          'Flat schema fields to merge into frontmatter, e.g. related, sources, question, answer_quality '
+          + '(question/synthesis), entity_type/role (entity), complexity/domain/aliases (concept), '
+          + 'source_type/author/url/key_claims (source), subjects/dimensions/verdict (comparison), '
+          + 'decision_date (decision). Values are scalars or scalar lists; nesting is forbidden; '
+          + 'managed fields (type/title/status/created/updated/tags) are rejected.',
       },
       source_path: {
         type: 'string',
@@ -162,9 +172,47 @@ export function createTools(vault, options = {}) {
           return { alreadyIngested: true, hash: tracked.hash, title: args.title }
         }
       }
-      return await vault.writePage(args)
+      const { extra_frontmatter: extraFrontmatter, ...rest } = args
+      return await vault.writePage({ ...rest, extraFrontmatter })
     },
     presentCall: args => ({ card: 'generic', title: `Write wiki page: ${args.title}`, kind: 'other', rawInput: { title: args.title, type: args.type } }),
+  })
+
+  const wikiRename = defineTool({
+    name: 'wiki_rename',
+    description:
+      'Rename one wiki page and rewrite every [[wikilink]] to it across the vault (aliases and heading '
+      + 'anchors preserved), move the file to the new title, retitle its frontmatter, swap its master-index '
+      + 'and folder _index entries, and log the rename. The append-only log and dated lint reports keep the '
+      + 'old name as history. Use this instead of manual file renames, which strand every inbound link.',
+    parameters: {
+      title: {
+        type: 'string',
+        required: true,
+        description: 'Exact current page title.',
+      },
+      new_title: {
+        type: 'string',
+        required: true,
+        description: 'New title; also the new filename and [[wikilink]] target. Title Case with spaces.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: true,
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: typeof value === 'object' && value !== null && 'to' in value
+          ? `wiki_rename: [[${value.from}]] → [[${value.to}]]; rewrote links in ${value.linksRewritten} files; page at ${value.path}`
+          : 'wiki_rename: failed',
+      }],
+    },
+    async execute(args) {
+      return await vault.renamePage({ title: args.title, newTitle: args.new_title })
+    },
+    presentCall: args => ({ card: 'generic', title: `Rename wiki page: ${args.title} → ${args.new_title}`, kind: 'other', rawInput: { from: args.title, to: args.new_title } }),
   })
 
   const wikiLint = defineTool({
@@ -190,7 +238,7 @@ export function createTools(vault, options = {}) {
     presentCall: () => ({ card: 'generic', title: 'Lint wiki vault', kind: 'other' }),
   })
 
-  return [wikiQuery, wikiWrite, wikiLint]
+  return [wikiQuery, wikiWrite, wikiRename, wikiLint]
 }
 
 /**
