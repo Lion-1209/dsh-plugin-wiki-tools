@@ -164,23 +164,16 @@ export function createTools(vault, options = {}) {
       },
       render: (args, value) => [{
         type: 'text',
-        text: typeof value === 'object' && value !== null && 'path' in value
-          ? `wiki_write: ${value.created ? 'created' : 'updated'} ${value.path}`
-          : `wiki_write: skipped ${args.title} (source unchanged)`,
+        text: typeof value === 'object' && value !== null && value.alreadyIngested === true
+          ? `wiki_write: skipped ${args.title} — source hash unchanged (pass force: true to re-ingest)`
+          : typeof value === 'object' && value !== null && 'path' in value
+            ? `wiki_write: ${value.created ? 'created' : 'updated'} ${value.path}`
+            : `wiki_write: skipped ${args.title} (source unchanged)`,
       }],
     },
     async execute(args) {
-      if (args.source_path !== undefined) {
-        const tracked = await vault.trackSource({
-          sourcePath: args.source_path,
-          pagesCreated: [args.title],
-        })
-        if (tracked.alreadyIngested && args.force !== true) {
-          return { alreadyIngested: true, hash: tracked.hash, title: args.title }
-        }
-      }
-      const { extra_frontmatter: extraFrontmatter, ...rest } = args
-      return await vault.writePage({ ...rest, extraFrontmatter })
+      const { extra_frontmatter: extraFrontmatter, source_path: sourcePath, ...rest } = args
+      return await vault.writePage({ ...rest, extraFrontmatter, sourcePath })
     },
     presentCall: args => ({ card: 'generic', title: `Write wiki page: ${args.title}`, kind: 'other', rawInput: { title: args.title, type: args.type } }),
   })

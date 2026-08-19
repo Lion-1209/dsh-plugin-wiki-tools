@@ -280,6 +280,61 @@ test('archiveSource moves a raw source and drops its manifest entry', async () =
   await assert.rejects(() => vault.archiveSource({ sourcePath: 'wiki/index.md' }), /\.raw\/ sources only/)
 })
 
+test('writePage with source_path registers the manifest and skips unchanged re-ingests', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await mkdir(join(root, '.raw', 'articles'), { recursive: true })
+  const sourceRel = '.raw/articles/notes.md'
+  await writeFile(join(root, '.raw', 'articles', 'notes.md'), 'source body v1', 'utf8')
+
+  const first = await vault.writePage({
+    type: 'source', title: 'Notes', content: '# Notes\n\nSummary v1.', sourcePath: sourceRel,
+  })
+  assert.equal(first.created, true)
+  let manifest = JSON.parse(await readFile(join(root, '.raw', '.manifest.json'), 'utf8'))
+  assert.ok(manifest.sources[sourceRel], 'entry stored under the normalized forward-slash key')
+  assert.equal(manifest.sources[sourceRel].pages_created[0], 'Notes')
+  assert.match(manifest.sources[sourceRel].hash, /^[0-9a-f]{64}$/, 'sha256, not a hand-computed md5')
+
+  const second = await vault.writePage({
+    type: 'source', title: 'Notes', content: '# Notes\n\nSummary v2.', sourcePath: sourceRel,
+  })
+  assert.equal(second.alreadyIngested, true)
+  const page = await readFile(join(root, 'wiki', 'sources', 'Notes.md'), 'utf8')
+  assert.ok(page.includes('Summary v1.'), 'unchanged source leaves the page untouched')
+
+  const forced = await vault.writePage({
+    type: 'source', title: 'Notes', content: '# Notes\n\nSummary v2.', sourcePath: sourceRel, force: true,
+  })
+  assert.equal(forced.created, false)
+  const forcedPage = await readFile(join(root, 'wiki', 'sources', 'Notes.md'), 'utf8')
+  assert.ok(forcedPage.includes('Summary v2.'), 'force rewrites the page')
+
+  await assert.rejects(
+    () => vault.writePage({ type: 'source', title: 'Elsewhere', content: 'x', sourcePath: 'wiki/index.md' }),
+    /source_path must be a vault-relative path under \.raw\//,
+  )
+})
+
+test('manifest keys written with backslashes still match on track and archive', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await mkdir(join(root, '.raw', 'articles'), { recursive: true })
+  await writeFile(join(root, '.raw', 'articles', 'twin.md'), 'twin body', 'utf8')
+  // Hand-written entry, Windows separators (what model-era manual edits produced).
+  await writeFile(join(root, '.raw', '.manifest.json'), JSON.stringify({
+    sources: { '.raw\\articles\\twin.md': { hash: '0'.repeat(64), ingested_at: '2026-01-01', pages_created: [], pages_updated: [] } },
+  }, null, 2), 'utf8')
+
+  await vault.trackSource({ sourcePath: '.raw/articles/twin.md', pagesCreated: ['Twin'] })
+  const manifest = JSON.parse(await readFile(join(root, '.raw', '.manifest.json'), 'utf8'))
+  assert.deepEqual(Object.keys(manifest.sources), ['.raw/articles/twin.md'], 'backslash twin replaced by the normalized key')
+
+  await vault.archiveSource({ sourcePath: '.raw/articles/twin.md' })
+  const emptied = JSON.parse(await readFile(join(root, '.raw', '.manifest.json'), 'utf8'))
+  assert.deepEqual(emptied.sources, {}, 'archive removes the entry regardless of stored separator style')
+})
+
 test('a held fresh lock rejects the second writer after retry', async () => {
   const root = await makeVault()
   const holder = new Vault(root, { lockStaleSeconds: 60 })
