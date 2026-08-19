@@ -257,6 +257,37 @@ export function createTools(vault, options = {}) {
     presentCall: args => ({ card: 'generic', title: `Scaffold wiki vault (${args.mode})`, kind: 'other', rawInput: { mode: args.mode } }),
   })
 
+  const wikiArchive = defineTool({
+    name: 'wiki_archive',
+    description:
+      'Archive one cold raw source: move it from .raw/ to .archive/ (same subpath, file kept on disk) '
+      + 'and drop its manifest entry so future ingests treat it as new. Use when a source is no longer '
+      + 'active but should not be deleted. Pages derived from it are untouched.',
+    parameters: {
+      source_path: {
+        type: 'string',
+        required: true,
+        description: 'Vault-relative .raw/ source path, e.g. .raw/articles/note.md.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: true,
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: typeof value === 'object' && value !== null && 'archivedTo' in value
+          ? 'wiki_archive: ' + value.archivedFrom + ' → ' + value.archivedTo + ' (manifest entry dropped)'
+          : 'wiki_archive: failed',
+      }],
+    },
+    async execute(args) {
+      return await vault.archiveSource({ sourcePath: args.source_path })
+    },
+    presentCall: args => ({ card: 'generic', title: 'Archive source: ' + args.source_path, kind: 'other', rawInput: { source: args.source_path } }),
+  })
+
   const wikiLint = defineTool({
     name: 'wiki_lint',
     description:
@@ -280,7 +311,7 @@ export function createTools(vault, options = {}) {
     presentCall: () => ({ card: 'generic', title: 'Lint wiki vault', kind: 'other' }),
   })
 
-  return [wikiQuery, wikiWrite, wikiRename, wikiScaffold, wikiLint]
+  return [wikiQuery, wikiWrite, wikiRename, wikiScaffold, wikiArchive, wikiLint]
 }
 
 /**

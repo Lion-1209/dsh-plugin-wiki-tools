@@ -237,3 +237,21 @@ test('vault root validation and wikilink extraction', async () => {
     ['Alpha', 'Beta', 'Gamma'],
   )
 })
+
+test('archiveSource moves a raw source and drops its manifest entry', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await mkdir(join(root, '.raw', 'articles'), { recursive: true })
+  await writeFile(join(root, '.raw', 'articles', 'old.md'), 'stale source', 'utf8')
+  await vault.trackSource({ sourcePath: '.raw/articles/old.md' })
+  const { archivedFrom, archivedTo } = await vault.archiveSource({ sourcePath: '.raw/articles/old.md' })
+  assert.equal(archivedFrom, '.raw/articles/old.md')
+  assert.equal(archivedTo, '.archive/articles/old.md')
+  const moved = await readFile(join(root, '.archive', 'articles', 'old.md'), 'utf8')
+  assert.equal(moved, 'stale source')
+  const manifest = JSON.parse(await readFile(join(root, '.raw', '.manifest.json'), 'utf8'))
+  assert.deepEqual(manifest.sources, {}, 'manifest entry dropped')
+  const again = await vault.trackSource({ sourcePath: '.raw/articles/old.md' }).then(() => false, error => error.message)
+  assert.match(String(again), /not found/)
+  await assert.rejects(() => vault.archiveSource({ sourcePath: 'wiki/index.md' }), /\.raw\/ sources only/)
+})
