@@ -90,6 +90,34 @@ test('lintVault passes a clean vault', async () => {
   assert.deepEqual(issues, [], 'an indexed page with complete frontmatter is clean')
 })
 
+test('writePage rejects status values outside the lifecycle vocabulary', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await assert.rejects(
+    () => vault.writePage({ type: 'concept', title: 'Bad Status', content: 'Body.', status: 'solid' }),
+    /status must be one of seed\/developing\/mature\/evergreen/,
+  )
+  await vault.writePage({ type: 'concept', title: 'Good Status', content: 'Body.', status: 'evergreen' })
+  const { issues } = await lintVault(root)
+  assert.deepEqual(issues.map(i => i.check).filter(c => c === 'status-vocabulary'), [], 'valid status passes lint')
+})
+
+test('lintVault flags status values outside the lifecycle vocabulary', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await vault.writePage({ type: 'concept', title: 'Legacy Page', content: 'Body written by an older version.' })
+  await mkdir(join(root, 'wiki', 'concepts'), { recursive: true })
+  const path = join(root, 'wiki', 'concepts', 'Legacy Page.md')
+  let raw = await readFile(path, 'utf8')
+  raw = raw.replace('status: developing', 'status: solid')
+  await writeFile(path, raw, 'utf8')
+  const { issues } = await lintVault(root)
+  const flagged = issues.find(issue => issue.check === 'status-vocabulary')
+  assert.ok(flagged, 'stray status flagged')
+  assert.equal(flagged.page, 'Legacy Page')
+  assert.match(flagged.detail, /solid/)
+})
+
 test('lintVault exempts _index files and container headings', async () => {
   const root = await makeVault()
   await mkdir(join(root, 'wiki', 'entities'), { recursive: true })
