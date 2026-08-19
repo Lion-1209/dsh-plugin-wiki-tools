@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Vault, splitFrontmatter, extractWikilinks } from '../lib/vault.js'
+import { Vault, splitFrontmatter, extractWikilinks, isMachineryPage } from '../lib/vault.js'
 
 async function makeVault() {
   const root = await mkdtemp(join(tmpdir(), 'wiki-vault-'))
@@ -316,8 +316,7 @@ test('writePage with source_path registers the manifest and skips unchanged re-i
   )
 })
 
-test('manifest keys written with backslashes still match on track and archive', async () => {
-  const root = await makeVault()
+test('manifest keys written with backslashes still match on track and archive', async () => {  const root = await makeVault()
   const vault = new Vault(root)
   await mkdir(join(root, '.raw', 'articles'), { recursive: true })
   await writeFile(join(root, '.raw', 'articles', 'twin.md'), 'twin body', 'utf8')
@@ -333,6 +332,39 @@ test('manifest keys written with backslashes still match on track and archive', 
   await vault.archiveSource({ sourcePath: '.raw/articles/twin.md' })
   const emptied = JSON.parse(await readFile(join(root, '.raw', '.manifest.json'), 'utf8'))
   assert.deepEqual(emptied.sources, {}, 'archive removes the entry regardless of stored separator style')
+})
+
+test('writePage reports unresolved wikilinks instead of writing them silently', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await vault.writePage({ type: 'entity', title: 'Real Entity', content: 'Exists.' })
+  const result = await vault.writePage({
+    type: 'concept',
+    title: 'Linking Concept',
+    content: 'Links [[Real Entity]] and [[Ghost Page]] and [[Real Entity]] again.',
+  })
+  assert.deepEqual(result.unresolvedLinks, ['Ghost Page'], 'only the unknown target is reported, deduped')
+  const clean = await vault.writePage({
+    type: 'concept', title: 'Clean Concept', content: 'Links [[Real Entity]] only.',
+  })
+  assert.equal(clean.unresolvedLinks, undefined, 'fully-resolved pages carry no note')
+})
+
+test('renamePage refuses vault machinery whatever the casing', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await vault.writePage({ type: 'concept', title: 'Filler', content: 'x.' })
+  await mkdir(join(root, 'wiki', 'meta'), { recursive: true })
+  await writeFile(join(root, 'wiki', 'meta', 'Lint Report 2026-08-19.md'), 'retitled report', 'utf8')
+  await assert.rejects(
+    () => vault.renamePage({ title: 'Lint Report 2026-08-19', newTitle: 'Report Renamed' }),
+    /machinery/,
+  )
+  await assert.rejects(() => vault.renamePage({ title: 'log', newTitle: 'History' }), /machinery/)
+  for (const name of ['lint-report-2026-08-19', 'Lint Report 2026-08-19', 'LINT REPORT x', 'log', 'LOG', 'Index', '_index', 'hot', 'Overview']) {
+    assert.ok(isMachineryPage(name), `machinery detection covers ${name}`)
+  }
+  assert.ok(!isMachineryPage('Lint Reporter Profile'), 'similar-looking content name is not machinery')
 })
 
 test('a held fresh lock rejects the second writer after retry', async () => {

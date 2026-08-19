@@ -106,7 +106,9 @@ export function createTools(vault, options = {}) {
       + 'CONFIGURED VAULT (run wiki_query to see its absolute root), not the session workspace. '
       + 'The content is the '
       + 'markdown body only — frontmatter is managed. With source_path, records the source hash in '
-      + 'the ingest manifest and reports already_ingested for unchanged content unless force is set.',
+      + 'the ingest manifest and reports already_ingested for unchanged content unless force is set. '
+      + 'The result lists unresolved wikilinks in the written page (targets that match no page or alias) '
+      + 'so dead links are fixed at write time, not at the next lint.',
     parameters: {
       title: {
         type: 'string',
@@ -168,6 +170,9 @@ export function createTools(vault, options = {}) {
           ? `wiki_write: skipped ${args.title} — source hash unchanged (pass force: true to re-ingest)`
           : typeof value === 'object' && value !== null && 'path' in value
             ? `wiki_write: ${value.created ? 'created' : 'updated'} ${value.path}`
+              + (Array.isArray(value.unresolvedLinks) && value.unresolvedLinks.length > 0
+                ? `\nwiki_write: note — ${value.unresolvedLinks.length} unresolved wikilink(s) in this page: ${value.unresolvedLinks.slice(0, 8).join(', ')}${value.unresolvedLinks.length > 8 ? ', …' : ''}. Create those pages or fix the targets; until then lint reports them as dead links.`
+                : '')
             : `wiki_write: skipped ${args.title} (source unchanged)`,
       }],
     },
