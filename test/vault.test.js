@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Vault, splitFrontmatter, extractWikilinks } from '../lib/vault.js'
@@ -120,13 +120,14 @@ test('updateIndex preserves an em-dash section style and refreshes in place', as
 
 test('typeFolders config reroutes pages and validates input', async () => {
   const root = await makeVault()
-  const vault = new Vault(root, { domain: 'wiki/areas' })
+  const vault = new Vault(root, { typeFolders: { domain: 'wiki/areas' } })
   const { path } = await vault.writePage({ type: 'domain', title: 'Health', content: 'Body.' })
   assert.equal(path, join(root, 'wiki', 'areas', 'Health.md'))
   const index = await readFile(join(root, 'wiki', 'index.md'), 'utf8')
   assert.ok(index.includes('## Areas'), 'index section follows the remapped folder')
-  assert.throws(() => new Vault(root, { unknown: 'wiki/x' }), /unknown type/)
-  assert.throws(() => new Vault(root, { domain: '../escape' }), /vault-relative/)
+  assert.throws(() => new Vault(root, { typeFolders: { unknown: 'wiki/x' } }), /unknown type/)
+  assert.throws(() => new Vault(root, { nope: 1 }), /unknown Vault option/)
+  assert.throws(() => new Vault(root, { typeFolders: { domain: '../escape' } }), /vault-relative/)
 })
 
 test('titles with regex metacharacters match their index entry', async () => {
@@ -254,4 +255,37 @@ test('archiveSource moves a raw source and drops its manifest entry', async () =
   const again = await vault.trackSource({ sourcePath: '.raw/articles/old.md' }).then(() => false, error => error.message)
   assert.match(String(again), /not found/)
   await assert.rejects(() => vault.archiveSource({ sourcePath: 'wiki/index.md' }), /\.raw\/ sources only/)
+})
+
+test('a held fresh lock rejects the second writer after retry', async () => {
+  const root = await makeVault()
+  const holder = new Vault(root, { lockStaleSeconds: 60 })
+  const watcher = new Vault(root, { lockStaleSeconds: 60 })
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  const first = holder.withFileLock('__vault__', async () => gate)
+  const locksDir = join(root, '.vault-meta', 'locks')
+  for (let attempt = 0; (await readdir(locksDir).catch(() => [])).length === 0; attempt += 1) {
+    if (attempt > 100) throw new Error('holder never acquired the lock')
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  const second = watcher.withFileLock('__vault__', async () => 'should not run')
+  await assert.rejects(second, /locked by another writer/)
+  release()
+  await first
+})
+
+test('git auto-commit records each mutation when enabled', async () => {
+  const root = await makeVault()
+  const { execSync } = await import('node:child_process')
+  execSync('git init -q .', { cwd: root })
+  execSync('git config user.email test@example.com', { cwd: root })
+  execSync('git config user.name test', { cwd: root })
+  const vault = new Vault(root, { gitAutoCommit: true })
+  await vault.writePage({ type: 'concept', title: 'Committed Concept', content: 'Body.' })
+  const log = execSync('git log --oneline', { cwd: root, encoding: 'utf8' }).trim()
+  assert.match(log, /wiki: create Committed Concept/)
+  await vault.writePage({ type: 'concept', title: 'Committed Concept', content: 'Body v2.' })
+  const log2 = execSync('git log --oneline', { cwd: root, encoding: 'utf8' }).trim()
+  assert.match(log2.split('\n')[0], /wiki: update Committed Concept/)
 })

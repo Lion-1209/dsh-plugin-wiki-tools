@@ -11,6 +11,8 @@
  * @module dsh-plugin-wiki-tools
  */
 
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import { Vault } from './lib/vault.js'
@@ -27,6 +29,10 @@ export const Config = z.object({
   vaultPath: z.string().required(),
   /** Maximum pages returned by one wiki_query standard-mode call. */
   maxQueryResults: z.number().default(10),
+  /** Commit each vault mutation when the vault is a git repository. */
+  gitAutoCommit: z.boolean().default(false),
+  /** Age in seconds at which a held cross-process lock is treated as crashed. */
+  lockStaleSeconds: z.number().default(60),
   /** Per-type folder overrides over the default routing, e.g. `{ domain: "wiki/areas" }`. */
   typeFolders: z.object({
     source: z.string(),
@@ -403,7 +409,16 @@ export async function apply(ctx, config) {
       + 'The vault is the directory holding wiki/ and .raw/ (scaffold it with the wiki skill first).',
     )
   }
-  const vault = new Vault(config.vaultPath, config.typeFolders ?? {})
+  if (config.gitAutoCommit === true && !existsSync(join(config.vaultPath, '.git'))) {
+    throw new Error(
+      'wiki-tools: gitAutoCommit is enabled but the vault is not a git repository; run git init in it first',
+    )
+  }
+  const vault = new Vault(config.vaultPath, {
+    typeFolders: config.typeFolders ?? {},
+    gitAutoCommit: config.gitAutoCommit ?? false,
+    lockStaleSeconds: config.lockStaleSeconds ?? 60,
+  })
   await vault.assertRoot()
   for (const tool of createTools(vault, config)) {
     ctx.tools.register(tool)
