@@ -231,8 +231,7 @@ test('renamePage rewrites links, swaps indexes, and spares history', async () =>
   )
 })
 
-test('renamePage spares pages whose titles merely start with the old title', async () => {
-  const root = await makeVault()
+test('renamePage spares pages whose titles merely start with the old title', async () => {  const root = await makeVault()
   const vault = new Vault(root)
   await vault.writePage({ type: 'concept', title: 'Agent Harness', content: 'The concept.', summary: 'Concept.' })
   await vault.writePage({ type: 'source', title: 'Agent Harness Comparison Notes', content: 'Source body.', summary: 'Source.' })
@@ -348,6 +347,21 @@ test('writePage reports unresolved wikilinks instead of writing them silently', 
     type: 'concept', title: 'Clean Concept', content: 'Links [[Real Entity]] only.',
   })
   assert.equal(clean.unresolvedLinks, undefined, 'fully-resolved pages carry no note')
+})
+
+test('renamePage refreshes updated on pages whose links it rewrote', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await vault.writePage({ type: 'concept', title: 'Old Title', content: 'Body.' })
+  await vault.writePage({ type: 'entity', title: 'Linker', content: 'Points at [[Old Title]].' })
+  const stale = '2020-01-01'
+  const linkerPath = join(root, 'wiki', 'entities', 'Linker.md')
+  await writeFile(linkerPath, (await readFile(linkerPath, 'utf8')).replace(/^(updated:).+$/m, `$1 ${stale}`), 'utf8')
+  await vault.renamePage({ title: 'Old Title', newTitle: 'New Title' })
+  const rewritten = await readFile(linkerPath, 'utf8')
+  assert.ok(rewritten.includes('[[New Title]]'), 'link rewritten')
+  assert.match(rewritten, /^updated: \d{4}-\d{2}-\d{2}$/m, 'updated stamp present')
+  assert.ok(!rewritten.includes(`updated: ${stale}`), 'stale stamp replaced by today')
 })
 
 test('renamePage refuses vault machinery whatever the casing', async () => {

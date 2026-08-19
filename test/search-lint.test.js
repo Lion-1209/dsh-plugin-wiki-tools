@@ -86,8 +86,23 @@ test('lintVault passes a clean vault', async () => {
   const root = await makeVault()
   const vault = new Vault(root)
   await vault.writePage({ type: 'concept', title: 'Solo Concept', content: '# Solo\n\nLinked from nowhere but indexed.' })
+  await writeFile(join(root, 'wiki', 'overview.md'), '# Overview\n\nA test vault.\n', 'utf8')
   const { issues } = await lintVault(root)
-  assert.deepEqual(issues, [], 'an indexed page with complete frontmatter is clean')
+  assert.deepEqual(issues, [], 'an indexed page with complete frontmatter and structure is clean')
+})
+
+test('lintVault reports a missing overview as info', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await vault.writePage({ type: 'concept', title: 'Solo Concept', content: '# Solo\n\nIndexed.' })
+  const flagged = await lintVault(root)
+  const info = flagged.issues.find(issue => issue.check === 'missing-structure')
+  assert.ok(info, 'missing overview flagged')
+  assert.equal(info.severity, 'info')
+  assert.equal(info.page, 'overview')
+  await writeFile(join(root, 'wiki', 'overview.md'), '# Overview\n', 'utf8')
+  const resolved = await lintVault(root)
+  assert.equal(resolved.issues.find(issue => issue.check === 'missing-structure'), undefined, 'info clears once overview exists')
 })
 
 test('writePage rejects status values outside the lifecycle vocabulary', async () => {
