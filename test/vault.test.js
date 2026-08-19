@@ -231,6 +231,29 @@ test('renamePage rewrites links, swaps indexes, and spares history', async () =>
   )
 })
 
+test('renamePage spares pages whose titles merely start with the old title', async () => {
+  const root = await makeVault()
+  const vault = new Vault(root)
+  await vault.writePage({ type: 'concept', title: 'Agent Harness', content: 'The concept.', summary: 'Concept.' })
+  await vault.writePage({ type: 'source', title: 'Agent Harness Comparison Notes', content: 'Source body.', summary: 'Source.' })
+  await vault.writePage({
+    type: 'entity',
+    title: 'Cordis',
+    content: 'See [[Agent Harness]] and the source [[Agent Harness Comparison Notes]].',
+  })
+  await vault.renamePage({ title: 'Agent Harness', newTitle: 'Agent Harness Framework' })
+
+  const linker = await readFile(join(root, 'wiki', 'entities', 'Cordis.md'), 'utf8')
+  assert.ok(linker.includes('[[Agent Harness Framework]]'), 'exact link rewritten')
+  assert.ok(linker.includes('[[Agent Harness Comparison Notes]]'), 'longer title that starts with the old title untouched')
+  assert.ok(!linker.includes('[[Agent Harness Framework Comparison Notes]]'), 'no prefix over-match')
+
+  const source = await readFile(join(root, 'wiki', 'sources', 'Agent Harness Comparison Notes.md'), 'utf8')
+  assert.ok(source.includes('title: Agent Harness Comparison Notes'), 'source page keeps its own title')
+  const index = await readFile(join(root, 'wiki', 'index.md'), 'utf8')
+  assert.ok(index.includes('[[Agent Harness Comparison Notes]]'), 'source index entry intact')
+})
+
 test('vault root validation and wikilink extraction', async () => {
   assert.throws(() => new Vault('relative/path'), /absolute/)
   assert.deepEqual(
@@ -288,4 +311,22 @@ test('git auto-commit records each mutation when enabled', async () => {
   await vault.writePage({ type: 'concept', title: 'Committed Concept', content: 'Body v2.' })
   const log2 = execSync('git log --oneline', { cwd: root, encoding: 'utf8' }).trim()
   assert.match(log2.split('\n')[0], /wiki: update Committed Concept/)
+})
+
+test('git auto-commit keeps advisory lock files out of history', async () => {
+  const root = await makeVault()
+  const { execSync } = await import('node:child_process')
+  execSync('git init -q .', { cwd: root })
+  execSync('git config user.email test@example.com', { cwd: root })
+  execSync('git config user.name test', { cwd: root })
+  const vault = new Vault(root, { gitAutoCommit: true })
+  await vault.withFileLock('test-op', async () => {
+    await vault.writePage({ type: 'concept', title: 'Locked Write', content: 'Body.' })
+  })
+  const tracked = execSync('git ls-files .vault-meta', { cwd: root, encoding: 'utf8' }).trim()
+  assert.equal(tracked, '', 'no lock file tracked under .vault-meta')
+  const gitignore = await readFile(join(root, '.gitignore'), 'utf8')
+  assert.ok(gitignore.includes('.vault-meta/locks/'), 'vault .gitignore names the lock directory')
+  const status = execSync('git status --porcelain .vault-meta', { cwd: root, encoding: 'utf8' }).trim()
+  assert.equal(status, '', 'lock files neither tracked nor pending')
 })
