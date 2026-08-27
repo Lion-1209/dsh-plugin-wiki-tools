@@ -62,7 +62,7 @@ test('tool executes run end to end over a fixture vault', async () => {
 
   const linted = await tools.wiki_lint.execute({}, exec)
   assert.equal(linted.summary.pagesScanned >= 1, true)
-  assert.ok(linted.reportPath.includes('lint-report-'))
+  assert.ok(linted.reportPath.includes('Lint Report '))
 })
 
 test('render output carries the full model-facing content, not a summary line', async () => {
