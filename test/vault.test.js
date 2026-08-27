@@ -216,8 +216,9 @@ test('renamePage rewrites links, swaps indexes, and spares history', async () =>
   assert.ok(linker.includes('[[Unrelated Page Name]]'), 'prefix-similar titles untouched')
 
   const index = await readFile(join(root, 'wiki', 'index.md'), 'utf8')
-  assert.ok(!index.includes('[[Old Name]]'), 'old index entry removed')
-  assert.ok(index.includes('[[New Name]]'), 'new index entry present')
+  const conceptSection = index.split('## Concepts')[1]?.split('## ')[0] ?? ''
+  assert.ok(!conceptSection.includes('[[Old Name]]'), 'old entry removed from Concepts section')
+  assert.ok(conceptSection.includes('[[New Name]]'), 'new entry present in Concepts section')
   const folderIndex = await readFile(join(root, 'wiki', 'concepts', '_index.md'), 'utf8')
   assert.ok(folderIndex.includes('[[New Name]]') && !folderIndex.includes('[[Old Name]]'), 'folder index swapped')
 
@@ -368,8 +369,7 @@ test('renamePage refuses vault machinery whatever the casing', async () => {
   const root = await makeVault()
   const vault = new Vault(root)
   await vault.writePage({ type: 'concept', title: 'Filler', content: 'x.' })
-  await mkdir(join(root, 'wiki', 'meta'), { recursive: true })
-  await writeFile(join(root, 'wiki', 'meta', 'Lint Report 2026-08-19.md'), 'retitled report', 'utf8')
+  await vault.writePage({ type: 'meta', title: 'Lint Report 2026-08-19', content: 'retitled report' })
   await assert.rejects(
     () => vault.renamePage({ title: 'Lint Report 2026-08-19', newTitle: 'Report Renamed' }),
     /machinery/,

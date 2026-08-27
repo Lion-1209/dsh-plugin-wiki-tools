@@ -79,7 +79,7 @@ test('lintVault flags the seeded issues and writes a report', async () => {
   assert.ok(checks.includes('empty-section'), 'Karpathy page has an empty section')
   assert.ok(checks.includes('stale-hot-cache'), 'hot cache older than page updates')
   assert.ok(summary.pagesScanned >= 2)
-  assert.ok(reportPath.includes(join('wiki', 'meta', 'lint-report-')))
+  assert.ok(reportPath.includes(join('wiki', 'meta', 'Lint Report ')))
 })
 
 test('lintVault passes a clean vault', async () => {
@@ -204,12 +204,12 @@ test('lint reports and inline code are not link-graph sources', async () => {
 
   // A lint report quoting past dead links must not resurrect them as issues.
   await mkdir(join(root, 'wiki', 'meta'), { recursive: true })
-  await writeFile(join(root, 'wiki', 'meta', 'lint-report-2026-08-18.md'),
+  await writeFile(join(root, 'wiki', 'meta', 'Lint Report 2026-08-18.md'),
     '---\ntype: meta\n---\n# Lint Report\n\n- links to [[Ghost Page]] which does not exist (recorded)', 'utf8')
   const after = await lintVault(root)
   assert.ok(!after.issues.some(issue => issue.check === 'dead-link' && issue.detail.includes('Ghost Page')),
     'report-recorded links are history, not graph edges')
 
   const { results } = await searchVault(root, { query: 'Ghost Page' })
-  assert.ok(!results.some(result => result.name.startsWith('lint-report')), 'reports are not search hits')
+  assert.ok(!results.some(result => result.name.startsWith('Lint Report')), 'reports are not search hits')
 })

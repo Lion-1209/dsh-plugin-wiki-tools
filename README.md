@@ -16,7 +16,7 @@ The vault layout and operation contracts follow the LLM Wiki pattern (Andrej Kar
 | --- | --- |
 | `wiki_query` | Quick mode returns `hot.md` + `index.md` verbatim (the skill's read order); standard mode is full-text search over content pages with snippets and the inbound/outbound link graph |
 | `wiki_write` | Writes one page with complete bookkeeping: type→folder routing, frontmatter completion (keeps `created` and unknown fields on update), filename-uniqueness guard, master-index entry, log entry; with `source_path`, records the source hash and skips unchanged sources unless `force` |
-| `wiki_lint` | Health check: duplicate filenames, dead wikilinks, orphan pages, frontmatter gaps, empty sections, stale index entries, stale hot cache — report only, with suggestions, written to `wiki/meta/lint-report-<date>.md` |
+| `wiki_lint` | Health check: duplicate filenames, dead wikilinks, orphan pages, frontmatter gaps, empty sections, stale index entries, stale hot cache — report only, with suggestions, written to `wiki/meta/Lint Report <date>.md` |
 
 ## Install and configure
 
