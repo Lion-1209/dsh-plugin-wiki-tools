@@ -1,10 +1,21 @@
 # dsh-plugin-wiki-tools
 
+[![npm version](https://img.shields.io/npm/v/dsh-plugin-wiki-tools)](https://www.npmjs.com/package/dsh-plugin-wiki-tools)
+[![npm weekly downloads](https://img.shields.io/npm/dw/dsh-plugin-wiki-tools)](https://www.npmjs.com/package/dsh-plugin-wiki-tools)
+[![License: MIT](https://img.shields.io/npm/l/dsh-plugin-wiki-tools)](LICENSE)
+[![Awesome DSH Plugin](https://img.shields.io/badge/listed-awesome--dsh--plugin-4a90d9)](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)
+
 English | [中文](#中文)
 
 Native [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) tools for an Obsidian wiki vault: `wiki_query`, `wiki_write`, and `wiki_lint` implement the mechanical core of the wiki skill suite — path routing, frontmatter completion, index/log bookkeeping, source delta tracking, and health checks — so the model spends its turns on synthesis instead of filesystem chores.
 
+```sh
+dsh plugin --profile web add dsh-plugin-wiki-tools
+```
+
 Pair with **[dsh-plugin-wiki-skills](https://github.com/Lion-1209/dsh-plugin-wiki-skills)** for the prompt-level skills (`wiki`, `wiki-ingest`, `wiki-query`, `wiki-lint`, `save`).
+
+*If this toolchain saves you time maintaining a wiki vault, a ⭐ helps other dsh users find it. 如果这个工具帮到了你，欢迎点个 Star。*
 
 ## Attribution
 
